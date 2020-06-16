@@ -1,0 +1,10 @@
+---
+title: "Webscraping-LS"
+author: "Sophie Hensgen"
+date: "16 6 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```

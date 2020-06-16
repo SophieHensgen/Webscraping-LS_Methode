@@ -1,0 +1,547 @@
+---
+title: "Jobcenter-Zuständigkeit-2-5"
+output: html_document
+author: Sophie Hensgen
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Needed Packages
+```{r}
+library(openxlsx)
+library(xml2)
+library(rvest)
+library(jsonlite)
+library(robotstxt)
+library(RSocrata)
+library(dplyr)
+library(rlist)
+library(pipeR)
+library(tidyverse)
+library(Jmisc)
+```
+## Jobcenter Zuständigkeiten
+
+# Wichtige Bundesländer
+ hier sind die Bundesländer welche unbedingt gescrapt werden müssen: NRW, Bayern, Brandenburg, Sachsen, Niedersachsen
+ 
+ Ein Bundesland pro session scrapen:
+
+
+######################################################################################################################################
+######################################################################################################################################
+######################################################################################################################################
+######################################################################################################################################
+
+
+# Nord-Rhein-Westfalen
+Hier können nur die Jobcenter an sich, aber nicht die Zuständigkeiten gescrapt werden!!
+
+Nur die Liste scrapen
+
+```{r}
+urlnrw <- "https://www.hartziv.org/jobcenter/nordrhein-westfalen.html"
+quelnrw <- read_html(urlnrw)
+print(urlnrw)
+nds <- html_nodes(quelnrw, xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "entry-content", " " ))]//li')
+nord <- html_text(nds)
+```
+
+Aufbereitung der Liste 
+
+```{r}
+nord1 <- gsub("ö", "oe", nord)
+nord2 <- gsub(" ", "-", nord1)
+nrw <-tolower(nord2)
+nrw
+```
+
+######################################################################################################################################
+######################################################################################################################################
+######################################################################################################################################
+######################################################################################################################################
+
+# Bayern
+
+Nur die Jobcenter gescrapt welche auch weiter benutzt werden können!!
+
+```{r}
+urlbay <- "https://www.hartziv.org/jobcenter/bayern.html"
+quelbay <- read_html(urlbay)
+print(urlbay)
+nodesbay <- html_nodes(quelbay, xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "entry-content", " " ))]//a')
+bayern <- html_text(nodesbay)
+bayern
+
+
+```
+
+Aufbereitung der Liste um nun die einzelnen Zuständigkeiten zu scrapen:
+
+```{r}
+bay2 <- gsub(" ", "-", bayern)
+bay3 <- gsub("ö", "oe", bay2)
+bayer <- gsub("des-", "", bay3)
+bayer <-tolower(bayer)
+bayer
+bayer <- bayer[ bayer != "jobcenter-landratsamts-miesbach"] # um miesbach zu entfernen, da es keine Zuständigkeit besitzt
+bayer
+```
+
+Zuständigkeiten für Bayern. 
+
+Funktioniert soweit, für die Öffnungszeiten und ein paar Zuständigkeiten. Jedoch sind die Zuständigkeiten unterschiedlich für jedes jobcenter
+
+```{r}
+zustandbayern <- data.frame()
+
+for (i in bayer) {
+    Sys.sleep(3 + runif(5))
+
+  i <- tolower(i)
+  urlbayern <- paste0("https://www.hartziv.org/jobcenter/bayern/", i, ".html")
+  quelbayern <- read_html(urlbayern)
+  print(urlbayern)
+  nodesbayern <- quelbayern %>% html_nodes("#content > div > div > div.nv-single-page-wrap.col > div.nv-content-wrap.entry-content > table") %>%  
+    html_table(trim=T, fill = TRUE)
+  zustandbayern <- append(zustandbayern, nodesbayern)
+}
+
+
+zustandbayern
+```
+
+landratsamt Miesbach hat keine Zuständigkeiten
+
+######################################################################################################################################
+######################################################################################################################################
+######################################################################################################################################
+#######################################################################################################################################
+
+# Brandenburg
+
+Hier können alle Jobcenter weiter verfolgt werden.
+
+
+```{r}
+urlbran <- "https://www.hartziv.org/jobcenter/brandenburg.html"
+quelbran <- read_html(urlbran)
+print(urlbran)
+nodesbran <- html_nodes(quelbran, xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "entry-content", " " ))]//a')
+bran <- html_text(nodesbran)
+bran
+```
+
+Aufbereitung der Liste für Brandenburg
+
+```{r}
+bran2 <- gsub(" ", "-", bran)
+bran3 <- gsub("ä", "ae", bran2)
+bran4 <- gsub(",-Stadt", "", bran3)
+bran5 <- gsub("-Stadt", "", bran4)
+bran6 <- gsub("[(]", "", bran5)
+bran7 <- gsub("ß", "ss", bran6)
+branden <- gsub(")", "", bran7)
+
+branden <-tolower(branden)
+branden
+```
+
+Finalter Versuch der funktioniert
+ - hier muss nun aussortiert werden was eine Zuständigkeit ist und was die Öffnungszeiten sind. 
+ 
+```{r}
+zustandbrand <- data.frame()
+
+for (i in branden) {
+  if (i > 1) {
+    Sys.sleep(3 + runif(5))
+  }
+  urlbrand <- paste0("https://www.hartziv.org/jobcenter/brandenburg/", i, ".html")
+  quelbrand <- xml2::read_html(urlbrand)
+  print(urlbrand)
+  nodesbrand <- quelbrand %>% html_nodes("#content > div > div > div.nv-single-page-wrap.col > div.nv-content-wrap.entry-content > table") %>%  
+    html_table(trim=T)
+  zustandbrand <- append(zustandbrand, nodesbrand)
+}
+
+zustandbrand
+```
+
+Zustandbrand Öffnungszeiten eigene Liste
+
+```{r}
+newöfbrand <- zustandbrand[c(1, 4, 6, 8, 12, 16, 18, 21, 25, 28, 31, 34, 38, 40, 41, 43, 44, 48, 52, 57, 59)]
+newöfbrand
+```
+
+Öffnungszeiten entfernen
+```{r}
+newzubrand <- zustandbrand[-c(1, 4, 6, 8, 12, 16, 18, 21, 25, 28, 31, 34, 38, 40, 41, 43, 44, 48, 52, 57, 59)]
+newzubrand
+```
+
+Spalte abziehen
+
+```{r einzeln}
+  extotal <- data.frame(newzubrand[[3]]$X1, newzubrand[[3]]$X2, newzubrand[[3]]$X3)
+  ex4 <- data.frame(newzubrand[[3]]$X4, NA, NA)
+  names(ex4)[1] <- "X1"
+  names(ex4)[2] <- "X2"
+  names(ex4)[3] <- "X3"
+  names(extotal)[1] <- "X1"
+  names(extotal)[2] <- "X2"
+  names(extotal)[3] <- "X3"
+  newzubrand[[3]] <- rbind(extotal, ex4)
+
+newzubrand[[3]]
+
+```
+```{r einzeln}
+zustandbrand <- vector()
+
+for (i in branden) {
+  urlbrand <- paste0("https://www.hartziv.org/jobcenter/brandenburg/", i, ".html")
+  quelbrand <- xml2::read_html(urlbrand)
+  print(urlbrand)
+  nodes <- quelbrand %>% html_nodes('#content > div > div > div.nv-single-page-wrap.col > div.nv-content-wrap.entry-content > h2:nth-child(32)') %>% html_text
+  head <- c(head, nodes)
+}
+```
+```{r}
+urlbran <- "https://www.hartziv.org/jobcenter/brandenburg/jobcenter-uckermark.html"
+quelbran <- read_html(urlbran)
+nodesb <- html_nodes(quelbran, xpath = '#content > div > div > div.nv-single-page-wrap.col > div.nv-content-wrap.entry-content > h2:nth-child(32)')
+bra <- html_text(nodesb)
+bra
+```
+
+
+```{r Add column}
+jobcenter <- c("Jobcenter Branim", "Jobcenter Barnim", "Jobcenter Brandenburg", "Jobcenter Cottbus", "Jobcenter Cottbus","Jobcenter Cottbus", "Jobcenter Dahme", "Jobcenter Elbe", "Jobcenter Elbe", "Jobcenter Elbe", "Jobcenter Frankfurt", "Jobcenter Havelland", "Jobcenter Havelland", "Jobcenter Oderland", "Jobcenter Oderland", "Jobcenter Oderland", "Jobcenter Oberland", "Jobcenter Oberland", "Jobcenter Lausitz", "Jobcenter Lausitz", "Jobcenter Oder", "Jobcenter Oder", "Jobcenter Ruppin", "Jobcenter Ruppin", "Jobcenter Potsdam", "Jobcenter Mittelmark", "Jobcenter Mittelmark", "Jobcenter Mittelmark", "Jobcenter Mittelmark", "Jobcenter Prignitz", "Jobcenter Prignitz", "Jobcenter Prignitz", "Jobcenter Spree", "Jobcenter Spree", "Jobcenter Spree", "Jobcenter Spree", "Jobcenter Teltow", "Jobcenter Uckermark", "Jobcenter Uckermark", "Jobcenter Uckermark")
+
+for (i in 1:41){
+   newzubrand[[i]]$Jobcenter <- jobcenter[i]
+   print(newzubrand[[i]])
+}
+
+```
+
+Spalte zu zwei dfs hinzufügen
+
+```{r einzeln}
+newzubrand[[11]]$X3 <- NA
+newzubrand[[11]]
+
+newzubrand[[16]]$X3 <- NA
+newzubrand[[16]]
+
+```
+
+Versuch die Data Frames zusammen zu fassen und nur noch eine Spalte zu haben!
+Funktioniert!!!
+```{r For Loop Versuch}
+
+# Loop um die dataframes zusammenzuführen
+exam <- data.frame()
+
+for (i in 1:41){
+  example <- newzubrand[[i]]
+  print(example)
+  example1 <- data.frame(example$X1, example$Jobcenter)
+  example2 <- data.frame(example$X2, example$Jobcenter)
+  example3 <- data.frame(example$X3, example$Jobcenter)
+  names(example1)[1] <- "V1"
+  names(example2)[1] <- "V1"
+  names(example3)[1] <- "V1"
+  examp <- rbind(example1, example2, example3)
+  examp
+  exam <- rbind(exam, examp)
+}
+exam
+
+#omit NAs
+na.omit(exam)
+exam
+
+# seperate the columns
+brand <- exam%>%
+  separate(V1, c("Postleitzahl", "Ort"), sep = " ")
+
+
+
+```
+
+fertiges Data-frame für ein Jobcenter!
+```{r}
+df1 <- data.frame(newzubr[[1]])
+
+names(df1) = bran[1]
+df1
+
+
+addCol(df1, Bundesland = 1, Zuständigkeiten = 2)
+df1 <- addCol(df1, value = c(Bundesland = "Baden-Würtemberg", Zuständigkeiten = "Jobcenter Barnim"))
+df1 <- separate(df1, "Jobcenter Barnim", c("Postleitzahl", "Ort"), sep = " ")
+df1
+
+```
+
+```{r for loop}
+newzubr <- data.frame()
+#zahl <- c(29:41)
+
+for (z in 1:41) {
+   new <- data.frame(new)
+   new <- gather(newzubrand[[z]], key, ort) %>% select(-key)
+   newzubr <- append(newzubr, new)
+}
+
+newzubr
+```
+
+Versuch Vektoren zusammen zuführen
+```{r}
+#[1] "jobcenter-barnim"                   "jobcenter-brandenburg-an-der-havel" "jobcenter-cottbus"                 
+#[4] "jobcenter-dahme-spreewald"          "jobcenter-elbe-elster"              "jobcenter-frankfurt-oder"          
+#[7] "jobcenter-havelland"                "jobcenter-maerkisch-oderland"       "jobcenter-oberhavel"               
+#[10] "jobcenter-oberspreewald-lausitz"    "jobcenter-oder-spree"               "jobcenter-ostprignitz-ruppin"      
+#[13] "jobcenter-potsdam-stadt"            "jobcenter-potsdam-mittelmark"       "jobcenter-prignitz"                
+#[16] "jobcenter-spree-neisse"             "jobcenter-teltow-flaeming"          "jobcenter-uckermark" 
+
+Barnim <- as.vector(rbind(newzubr[[1]], newzubr[[2]]))
+Brandenburg <- as.vector(newzubr[[3]])
+Cottbus <- as.vector(newzubr[[4]])
+dahme <- as.vector(rbind(newzubr[[5]], newzubr[[6]],newzubr[[7]]))
+elbe <- as.vector(rbind(newzubr[[8]], newzubr[[9]],newzubr[[10]]))
+frankfurt <- as.vector(newzubr[[11]])
+havelland <- as.vector(rbind(newzubr[[12]], newzubr[[13]]))
+oderland <- as.vector(rbind(newzubr[[15]], newzubr[[16]],newzubr[[17]], newzubr[[18]]))
+oberhavel <- as.vector(newzubr[[19]])
+lausitz <- as.vector(newzubr[[20]])
+oder <- as.vector(rbind(newzubr[[21]], newzubr[[22]]))
+ruppin <- as.vector(rbind(newzubr[[23]], newzubr[[24]], newzubr[[25]]))
+potsdam <- as.vector(newzubr[[26]])
+mittelmark <- as.vector(rbind(newzubr[[27]], newzubr[[28]],newzubr[[29]], newzubr[[30]]))
+prignitz <- as.vector(rbind(newzubr[[31]], newzubr[[32]], newzubr[[33]]))
+spree <- as.vector(rbind(newzubr[[34]], newzubr[[35]],newzubr[[36]], newzubr[[37]], newzubr[[38]]))
+teltow <- as.vector(rbind(newzubr[[39]], newzubr[[40]]))
+uckermark <- as.vector(newzubr[[41]])
+
+jobcenter <- c("Jobcenter Branim", "Jobcenter Barnim", "Jobcenter Brandenburg", "Jobcenter Cottbus", "Jobcenter Dahme", "Jobcenter Dahme", "Jobcenter Dahme", "Jobcenter Elbe", "Jobcenter Elbe", "Jobcenter Elbe", "Jobcenter Frankfurt", "Jobcenter Havelland", "Jobcenter Havelland", "Jobcenter Oderland", "Jobcenter Oderland", "Jobcenter Oderland", "Jobcenter Oderland", "Jobcenter Oberland", "Jobcenter Lausitz", "Jobcenter Oder", "Jobcenter Oder", "Jobcenter Ruppin", "Jobcenter Ruppin", "Jobcenter Ruppin", "Jobcenter Potsdam", "Jobcenter Mittelmark", "Jobcenter Mittelmark", "Jobcenter Mittelmark", "Jobcenter Mittelmark", "Jobcenter Prignitz", "Jobcenter Prignitz", "Jobcenter Prignitz", "Jobcenter Spree", "Jobcenter Spree", "Jobcenter Spree", "Jobcenter Spree", "Jobcenter Spree", "Jobcenter Teltow", "Jobcenter Teltow", "Jobcenter Uckermark")
+jobcenter <- list(Barnim, Brandenburg, Cottbus, dahme, elbe, frankfurt, havelland, Oderland, oberhavel, Lausitz, oder, Ruppin, Potsdam, Mittelmark, prignitz, Spree, Teltow, Uckermark)
+jobcenter
+```
+
+fertiges Data-frame für ein Jobcenter!
+```{r}
+df1 <- data.frame(newzubr[[1]])
+
+names(df1) = bran[1]
+df1
+
+
+addCol(df1, Bundesland = 1, Zuständigkeiten = 2)
+df1 <- addCol(df1, value = c(Bundesland = "Baden-Würtemberg", Zuständigkeiten = "Jobcenter Barnim"))
+df1 <- separate(df1, "Jobcenter Barnim", c("Postleitzahl", "Ort"), sep = " ")
+df1
+
+```
+angepasste data frame ding für die Loops --> nur ein Zwischenschritt!
+```{r}
+d <- data.frame(jobcenter[1])
+    names(d) = bran[1]
+    addCol(d, Bundesland = 1, Zuständigkeiten = 2)
+    d <- addCol(d, value = c(Bundesland = "Baden-Würtemberg", Zuständigkeiten = bran[1]))
+    d <- separate(d, bran[1], c("Postleitzahl", "Ort"), sep = " ")
+```
+Versuch alle zuständigkeiten in eine eigenes df zu machen und sie danach zusammen zufügen
+```{r}
+dfs <- c("a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r")
+d <- data.frame()
+for (i in 1:18) {
+  for (z in dfs) {
+    z <- data.frame(jobcenter[1])
+    names(z) = bran[1]
+    addCol(z, Bundesland = 1, Zuständigkeiten = 2)
+    z <- addCol(z, value = c(Bundesland = "Baden-Würtemberg", Zuständigkeiten = bran[1]))
+    z <- separate(z, bran[1], c("Postleitzahl", "Ort"), sep = " ")
+  }
+}
+  
+```
+
+######################################################################################################################################
+######################################################################################################################################
+######################################################################################################################################
+######################################################################################################################################
+
+# Sachsen
+
+Hier können auch alle Jobcenter genutzt werden 
+
+```{r}
+urlsac <- "https://www.hartziv.org/jobcenter/sachsen.html"
+quelsac <- read_html(urlsac)
+print(urlsac)
+nodessac <- html_nodes(quelsac, xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "entry-content", " " ))]//a')
+sac <- html_text(nodessac)
+sac
+
+```
+
+Aufbereitung der Liste für Sachsen
+
+```{r}
+sac1 <- gsub("Jobcenter ", "", sac)
+sac2 <- gsub("ß", "ss", sac1)
+sac3 <- gsub("ö", "oe", sac2)
+sac4 <- gsub(")", "", sac3)
+sac5 <- gsub("[(]", "", sac4)
+sac6 <- gsub("ä", "ae", sac5)
+sac7 <- gsub(" ", "-", sac6)
+sach <- gsub("Erzgebirgkreis", "Erzgebirgekreis", sac7)
+
+
+
+sach <- tolower(sach)
+sach
+```
+
+Versuch die Zuständigkeiten zu scrapen 
+--> Funktioniert, aber es werden auch zusätzliche Dinge gescrapt die nicht erwünscht sind
+--> auch hier aufbereitung
+
+ 
+```{r}
+zustandsac <- data.frame()
+
+for (i in sach) {
+  if (i > 1) {
+    Sys.sleep(3 + runif(5))
+  }
+  urlsac <- paste0("https://www.hartziv.org/jobcenter/sachsen/", i, ".html")
+  quelsac <- xml2::read_html(urlsac)
+  print(urlsac)
+  nodessac <- quelsac %>% html_nodes("#content > div > div > div.nv-single-page-wrap.col > div.nv-content-wrap.entry-content > ul") %>% html_text(trim=T)
+  zustandsac <- append(zustandsac, nodessac)
+}
+
+zustandsac
+```
+To do hier:
+
+ - Aufzählung der Jobcenter löschen
+ - Unter Jobcenter Vektor kreieren 
+ - Jobcenter und Zugehörigkeiten verbinden
+ - Postleitzahl und Ort als df
+ - Postleitzahl und Ort als eigene Variable
+
+
+
+Nur ein Test ist nicht nötig hier weiter vorzugehen
+```{r}
+url <- "https://www.hartziv.org/jobcenter/sachsen/bautzen.html"
+p <- read_html(url)
+table2 <- p %>% html_nodes("#content > div > div > div.nv-single-page-wrap.col > div.nv-content-wrap.entry-content > ul") %>% html_text(trim=T)
+table2
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+######################################################################################################################################
+
+# Niedersachsen
+
+Hier können auch alle Jobcenter genutzt werden 
+
+```{r}
+urlnied <- "https://www.hartziv.org/jobcenter/niedersachsen.html"
+quelnied <- read_html(urlnied)
+print(urlnied)
+nodesnied <- html_nodes(quelnied, xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "entry-content", " " ))]//a')
+nied <- html_text(nodesnied)
+nied
+
+```
+
+Datenaufbereitung für Niedersachsen
+
+```{r}
+nied1 <- gsub("Jobcenter ","" , nied )
+nied2 <- gsub(" ", "-", nied1)
+nied3 <- gsub("ü", "ue", nied2)
+nied4 <- gsub(")", "", nied3)
+nieder <- gsub("[(]", "", nied4)
+nieder <- tolower(nieder)
+nieder
+
+```
+
+Versuch die Zuständigkeiten zu scrapen 
+--> funktioniert muss zugeordnet werden
+
+ 
+```{r}
+zustandnied <- data.frame()
+
+for (i in nieder) {
+  if (i > 1) {
+    Sys.sleep(3 + runif(10))
+  }
+  urlnied <- paste0("https://www.hartziv.org/jobcenter/niedersachsen/", i, ".html")
+  quelnied <- read_html(urlsac)
+  print(urlnied)
+  nodesnied <- quelnied %>% html_nodes("#content > div > div > div.nv-single-page-wrap.col > div.nv-content-wrap.entry-content > ul") %>% html_text(trim=T)
+  zustandnied <- append(zustandnied, nodesnied)
+}
+
+zustandnied
+
+```
+To dos
+
+ - Aufzählung der Jobcenter löschen
+ - Unter Jobcenter Vektor kreieren 
+ - Jobcenter und Zugehörigkeiten verbinden
+ - Postleitzahl und Ort als df
+ - Postleitzahl und Ort als eigene Variable
+```{r}
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
